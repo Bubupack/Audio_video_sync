@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+code_old/
+input_song/
+input_video/
+output/
+output_old/
+pb/

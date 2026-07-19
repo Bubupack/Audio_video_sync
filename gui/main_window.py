@@ -1,39 +1,50 @@
 # gui/main_window.py
-from PyQt6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QHBoxLayout
-from gui.video_widget import VideoWidget
+"""Main application window hosting the video and audio players side by side."""
+from __future__ import annotations
+
+import logging
+
+from PyQt6.QtWidgets import QHBoxLayout, QMainWindow, QVBoxLayout, QWidget
+
 from gui.audio_widget import AudioWidget
+from gui.video_widget import VideoWidget
+
+logger = logging.getLogger(__name__)
+
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Audio-Vidéo Sync")
+        self.setWindowTitle("Audio-Video Sync")
         self.resize(960, 540)
 
-        # 1. On instancie les lecteurs
-        self.Videoplayer = VideoWidget()
-        self.Audioplayer = AudioWidget()
+        # Instantiate the two players
+        self.video_player = VideoWidget(self)
+        self.audio_player = AudioWidget(self)
 
-        # 2. Connexion des signaux
-        self.Audioplayer.audio_loaded.connect(self.on_audio_received)
-        self.Videoplayer.video_loaded.connect(self.on_video_received)
+        # Forward media-loaded signals
+        self.video_player.video_loaded.connect(self._on_video_received)
+        self.audio_player.audio_loaded.connect(self._on_audio_received)
 
-        # Largeur identique (50% / 50%)
-        layout_cote_a_cote = QHBoxLayout()
-        layout_cote_a_cote.addWidget(self.Videoplayer, stretch=1)
-        layout_cote_a_cote.addWidget(self.Audioplayer, stretch=1)
+        # Side-by-side layout (50% / 50%)
+        side_by_side = QHBoxLayout()
+        side_by_side.addWidget(self.video_player, stretch=1)
+        side_by_side.addWidget(self.audio_player, stretch=1)
 
-        # Layout principal avec le stretch tout en bas
-        # C'est lui qui colle l'ensemble vers le haut sans écraser les boutons
-        layout_principal = QVBoxLayout()
-        layout_principal.addLayout(layout_cote_a_cote)
-        layout_principal.addStretch() 
+        # Top-aligned main layout
+        main_layout = QVBoxLayout()
+        main_layout.addLayout(side_by_side)
+        main_layout.addStretch()
 
-        container = QWidget()
-        container.setLayout(layout_principal)
+        container = QWidget(self)
+        container.setLayout(main_layout)
         self.setCentralWidget(container)
-    
-    def on_audio_received(self, path):
-        print(path)
 
-    def on_video_received(self, path):
-        print(path)
+    # ------------------------------------------------------------------
+    # Signal handlers
+    # ------------------------------------------------------------------
+    def _on_audio_received(self, path: str) -> None:
+        logger.info("Audio loaded: %s", path)
+
+    def _on_video_received(self, path: str) -> None:
+        logger.info("Video loaded: %s", path)

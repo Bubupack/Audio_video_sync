@@ -155,7 +155,6 @@ pip install -r requirements.txt
 ```
 
 
-
 ---
 
 ## Usage
@@ -179,6 +178,16 @@ python main.py
 | --- | --- |
 | **Audio** | `.mp3`, `.wav`, `.flac` |
 | **Video** | `.mp4`, `.avi`, `.mkv`, `.mov` |
+
+---
+
+### Recommended Video Settings
+
+For best results, use a source video file that is **1.2x to 1.5x longer than the audio track** (Video:Audio duration ratio between **1.2:1 and 1.5:1**):
+
+* **1:1 Ratio (Same length):** Causes noticeable lag and performance drops.
+* **2:1 Ratio (2x longer video):** Results in an intense 2x speedup effect (often too fast).
+* **1.2:1 to 1.5:1 Ratio (Recommended):** Optimal balance for smooth performance and an appealing speedup effect.
 
 ---
 

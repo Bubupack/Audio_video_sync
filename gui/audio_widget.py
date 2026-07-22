@@ -185,3 +185,10 @@ class AudioWidget(BaseMediaPlayerWidget):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._refresh_cover()
+
+    #------------------------------------------------------------------
+    # Public API
+    #------------------------------------------------------------------
+    def get_cover_pixmap(self) -> Optional[QPixmap]:
+        """Retourne la pochette audio courante sous forme de QPixmap."""
+        return self._cover_pixmap

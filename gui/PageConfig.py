@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Optional
-
+from PyQt6.QtGui import QImage, QPixmap
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QPushButton, QVBoxLayout, QWidget
 
@@ -13,7 +13,7 @@ from gui.audio_widget import AudioWidget
 from gui.video_widget import VideoWidget
 from gui.outputDir_widget import OutputDirWidget
 from config.config import DEFAULT_OUTPUT_DIR
-
+from utils.utils import extract_video_thumbnail
 logger = logging.getLogger(__name__)
 
 
@@ -113,3 +113,13 @@ class PageConfig(QWidget):
 
         # 4. Met à jour le bouton Start (qui redevient grisé automatiquement)
         self._update_start_button_state()
+
+    def get_audio_cover(self) -> Optional[QPixmap]:
+        """Récupère la pochette audio extraite par AudioWidget."""
+        return self.audio_player.get_cover_pixmap()
+
+    def get_video_cover(self) -> Optional[QPixmap]:
+        """Génère et retourne la miniature vidéo."""
+        if self._video_path:
+            return extract_video_thumbnail(self._video_path)
+        return None

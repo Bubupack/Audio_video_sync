@@ -1,6 +1,9 @@
 """Small utility helpers shared across modules."""
 import re
 from pathlib import Path
+from typing import Optional
+from PyQt6.QtGui import QImage, QPixmap
+import cv2
 
 from config.config import (
     FILESYSTEM_MAX_STEM_LENGTH,
@@ -110,3 +113,23 @@ def get_unique_output_path(directory: Path, stem: str, suffix: str) -> Path:
         if not new_path.exists():
             return new_path
         counter += 1
+
+def extract_video_thumbnail(video_path: str) -> Optional[QPixmap]:
+    """Extract the first frame of a video as a QPixmap thumbnail."""
+    try:
+        cap = cv2.VideoCapture(video_path)
+        ret, frame = cap.read()
+        cap.release()
+        
+        if not ret or frame is None:
+            return None
+            
+        # Conversion BGR (OpenCV) vers RGB (Qt)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        h, w, ch = frame_rgb.shape
+        bytes_per_line = ch * w
+        
+        q_image = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+        return QPixmap.fromImage(q_image)
+    except Exception:
+        return None

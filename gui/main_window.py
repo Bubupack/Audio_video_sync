@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import logging
 
-from PyQt6.QtWidgets import QHBoxLayout, QMainWindow, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QHBoxLayout, QMainWindow, QMessageBox, QStackedWidget, QVBoxLayout, QWidget
 
+from PyQt6.QtCore import QThread
+from core.processing_worker import ProcessingWorker
 from gui.PageConfig import PageConfig
 from gui.audio_widget import AudioWidget
 from gui.video_widget import VideoWidget
 from gui.outputDir_widget import OutputDirWidget
 from config.config import DEFAULT_OUTPUT_DIR
+from gui.page_processing import PageProcessing
 logger = logging.getLogger(__name__)
 
 
@@ -19,38 +22,75 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Audio-Video Sync")
         self.resize(960, 540)
-        
-        # Initialize paths
-        self.video_path: str = ""
-        self.audio_path: str = ""
-        self.output_directory: str = DEFAULT_OUTPUT_DIR
 
-        # Instantiate the two players
-        self.PageConfig = PageConfig()
+        self.pages = QStackedWidget(self)
+        self.setCentralWidget(self.pages)
 
-        # Forward media-loaded signals
-        self.PageConfig.video_path.connect(self._on_video_received)
-        self.PageConfig.audio_path.connect(self._on_audio_received)
-        self.PageConfig.output_directory.connect(self._on_output_directory_changed)
+        self.page_config = PageConfig()
+        self.page_processing = PageProcessing()
 
-        main_layout = QVBoxLayout()
-        main_layout.addWidget(self.PageConfig)
-        
-        container = QWidget(self)
-        container.setLayout(main_layout)
-        self.setCentralWidget(container)
+        self.pages.addWidget(self.page_config)
+        self.pages.addWidget(self.page_processing)
 
-    # ------------------------------------------------------------------
-    # Signal handlers
-    # ------------------------------------------------------------------
-    def _on_audio_received(self, path: str) -> None:
-        self.audio_path = path
-        logger.info("Audio loaded: %s", path)
+        self.page_config.start_requested.connect(self._start_processing)
 
-    def _on_video_received(self, path: str) -> None:
-        self.video_path = path
-        logger.info("Video loaded: %s", path)
+        # Variables pour le thread
+        self._thread: QThread | None = None
+        self._worker: ProcessingWorker | None = None
 
-    def _on_output_directory_changed(self, new_dir: str) -> None:
-        self.output_directory = new_dir
-        logger.info("Output directory changed to: %s", new_dir)
+    def _start_processing(self) -> None:
+        # Récupération des chemins validés
+        video_path = self.page_config._video_path
+        audio_path = self.page_config._audio_path
+        output_dir = self.page_config._output_dir
+
+        video_cover = self.page_config.get_video_cover()
+        audio_cover = self.page_config.get_audio_cover()
+
+        # 1. Préparation de l'UI : réinitialiser et afficher la page de progression
+        self.page_config.reset()
+        self.page_processing.reset_ui()
+        self.page_processing.set_media_info(video_cover, audio_cover)
+        self.pages.setCurrentWidget(self.page_processing)
+
+        # 2. Instanciation du Worker et du QThread
+        self._thread = QThread()
+        self._worker = ProcessingWorker(video_path, audio_path, output_dir)
+        self._worker.moveToThread(self._thread)
+
+        # 3. Connexion des signaux
+        # Quand le thread démarre, exécuter worker.run
+        self._thread.started.connect(self._worker.run)
+
+        # Transmission directe des informations du Worker à la page de chargement
+        self._worker.progress.connect(self.page_processing.set_progress)
+        self._worker.status.connect(self.page_processing.set_status)
+
+        # Fin ou Erreur du traitement
+        self._worker.finished.connect(self._on_processing_finished)
+        self._worker.error.connect(self._on_processing_error)
+
+        # Nettoyage de la mémoire quand c'est fini
+        self._worker.finished.connect(self._thread.quit)
+        self._worker.finished.connect(self._worker.deleteLater)
+        self._thread.finished.connect(self._thread.deleteLater)
+
+        # 4. Lancement du thread
+        self._thread.start()
+
+    def _on_processing_finished(self) -> None:
+        logger.info("Traitement terminé avec succès !")
+        QMessageBox.information(
+            self, "Succès", "La vidéo resynchronisée a été générée avec succès !"
+        )
+        # Retour à la page de configuration (ou vers une future page de résultats)
+        self.pages.setCurrentWidget(self.page_config)
+
+    def _on_processing_error(self, err_msg: str) -> None:
+        logger.error("Erreur durant le traitement : %s", err_msg)
+        QMessageBox.critical(
+            self, "Erreur", f"Une erreur s'est produite lors du traitement :\n{err_msg}"
+        )
+        if self._thread and self._thread.isRunning():
+            self._thread.quit()
+        self.pages.setCurrentWidget(self.page_config)

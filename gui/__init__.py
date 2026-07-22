@@ -1,0 +1,1 @@
+"""GUI package for the Audio-Video Sync application."""

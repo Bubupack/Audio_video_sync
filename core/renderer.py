@@ -3,13 +3,12 @@ import bisect
 import logging
 import subprocess
 from pathlib import Path
-from typing import List
+from typing import List, Callable, Optional
 
 import cv2
 import numpy as np
 
-from config import RenderConfig
-from progress import ProgressBar
+from config.config import RenderConfig
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +68,9 @@ def generate_final_video(
     frame_count: int,
     output_path: Path,
     config: RenderConfig,
+    on_start: Optional[Callable[[str, int], None]] = None,
+    on_progress: Optional[Callable[[int], None]] = None,
+    on_finish: Optional[Callable[[], None]] = None,
 ) -> None:
     """Generate the final synchronized MKV by piping raw frames to FFmpeg.
 
@@ -104,9 +106,10 @@ def generate_final_video(
 
         current_src_idx = -1
         current_frame: np.ndarray | None = None
-        bar = ProgressBar("Rendering", total_out_frames)
+        if on_start:
+            on_start("Rendering", total_out_frames)
 
-        logger.info("Generating final video (direct pipe to FFmpeg)...")
+        logger.info("Generating final video (direct pipe to FFmpeg)")
 
         try:
             for out_idx in range(total_out_frames):
@@ -135,9 +138,11 @@ def generate_final_video(
                 if current_frame is not None:
                     _write_frame(proc, current_frame)
 
-                if out_idx % 30 == 0:
-                    bar.update(out_idx + 1)
-            bar.finish()
+                if out_idx % 10 == 0:
+                    if on_progress:
+                        on_progress(out_idx + 1)
+            if on_finish:
+                on_finish()
         finally:
             if proc.stdin and not proc.stdin.closed:
                 try:

@@ -6,7 +6,7 @@ import librosa
 import numpy as np
 from pathlib import Path
 
-from config import AppConfig
+from config.config import AppConfig
 
 
 @dataclass

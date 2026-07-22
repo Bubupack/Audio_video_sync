@@ -39,7 +39,7 @@ def _compute_motion_scores(
 
         # Notification de démarrage du traitement
         if on_start:
-            on_start("Analyzing video motion...", frame_count)
+            on_start("Analyzing video motion", frame_count)
 
         target_w, target_h = _compute_resize_target(
             first_frame.shape[1], first_frame.shape[0], config.target_width
@@ -76,7 +76,7 @@ def _compute_motion_scores(
             frame_idx += 1
 
             # Mise à jour de la progression vers le Worker (ex: toutes les 5 frames)
-            if on_progress and (frame_idx % 5 == 0 or frame_idx == frame_count):
+            if on_progress and (frame_idx % 10 == 0 or frame_idx == frame_count):
                 on_progress(frame_idx)
 
         # Notification de fin

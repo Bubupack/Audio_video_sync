@@ -1,10 +1,10 @@
 """Media metadata retrieval (audio samples + video properties)."""
 from dataclasses import dataclass
+from pathlib import Path
 
 import cv2
 import librosa
 import numpy as np
-from pathlib import Path
 
 from config.config import AppConfig
 

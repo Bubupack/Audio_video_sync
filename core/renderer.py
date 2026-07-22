@@ -85,6 +85,9 @@ def generate_final_video(
         frame_count: Total source video frames.
         output_path: Destination file path.
         config: Render configuration.
+        on_start: Optional callback for processing start.
+        on_progress: Optional callback for progress updates.
+        on_finish: Optional callback for processing end.
 
     Raises:
         RuntimeError: If FFmpeg exits with a non-zero status.
@@ -97,8 +100,9 @@ def generate_final_video(
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-        a_peaks = [0, *audio_peaks, audio_duration_ms]
-        v_peaks = [0, *video_peaks, video_duration_ms]
+        # Include start (0) and end (duration) boundaries for segment mapping
+        audio_boundaries = [0, *audio_peaks, audio_duration_ms]
+        video_boundaries = [0, *video_peaks, video_duration_ms]
 
         total_out_frames = int((audio_duration_ms / 1000) * fps)
         cmd = _build_ffmpeg_command(width, height, fps, audio_path, output_path, config)
@@ -106,6 +110,7 @@ def generate_final_video(
 
         current_src_idx = -1
         current_frame: np.ndarray | None = None
+        
         if on_start:
             on_start("Rendering", total_out_frames)
 
@@ -115,20 +120,23 @@ def generate_final_video(
             for out_idx in range(total_out_frames):
                 out_time_ms = (out_idx / fps) * 1000
 
-                segment_idx = bisect.bisect_right(a_peaks, out_time_ms) - 1
-                segment_idx = max(0, min(segment_idx, len(a_peaks) - 2))
+                # Find which segment the current output timestamp falls into
+                segment_idx = bisect.bisect_right(audio_boundaries, out_time_ms) - 1
+                segment_idx = max(0, min(segment_idx, len(audio_boundaries) - 2))
 
-                t_start_audio, t_end_audio = a_peaks[segment_idx], a_peaks[segment_idx + 1]
-                t_start_video, t_end_video = v_peaks[segment_idx], v_peaks[segment_idx + 1]
+                t_start_audio, t_end_audio = audio_boundaries[segment_idx], audio_boundaries[segment_idx + 1]
+                t_start_video, t_end_video = video_boundaries[segment_idx], video_boundaries[segment_idx + 1]
 
                 dt_audio = t_end_audio - t_start_audio
                 ratio = (out_time_ms - t_start_audio) / dt_audio if dt_audio > 0 else 0
 
+                # Map audio time to video time within the same segment
                 src_time_ms = t_start_video + ratio * (t_end_video - t_start_video)
                 src_frame_idx = max(
                     0, min(int(round((src_time_ms / 1000) * fps)), frame_count - 1)
                 )
 
+                # Read forward until we reach the target source frame
                 while current_src_idx < src_frame_idx:
                     ret, frame = cap.read()
                     current_src_idx += 1
@@ -138,9 +146,10 @@ def generate_final_video(
                 if current_frame is not None:
                     _write_frame(proc, current_frame)
 
-                if out_idx % 10 == 0:
-                    if on_progress:
-                        on_progress(out_idx + 1)
+                # Report progress every 10 frames
+                if out_idx % 10 == 0 and on_progress:
+                    on_progress(out_idx + 1)
+                    
             if on_finish:
                 on_finish()
         finally:

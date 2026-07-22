@@ -65,6 +65,7 @@ class PageVisualization(QWidget):
         # --- Player → controls synchronisation ---
         self.media_player.positionChanged.connect(self._on_position_changed)
         self.media_player.durationChanged.connect(self._on_duration_changed)
+        self.media_player.mediaStatusChanged.connect(self._on_media_status_changed)
 
         self._build_ui()
 
@@ -121,6 +122,13 @@ class PageVisualization(QWidget):
     # ------------------------------------------------------------------
     # Playback handlers
     # ------------------------------------------------------------------
+    def _on_media_status_changed(self, status: QMediaPlayer.MediaStatus) -> None:
+        """Handle end-of-media to keep controls enabled and reset the play icon."""
+        if status == QMediaPlayer.MediaStatus.EndOfMedia:
+            self.controls_bar.set_playing(False)
+            # Optional: rewind to the beginning automatically when it ends
+            self.media_player.setPosition(0)
+
     def _toggle_play(self) -> None:
         is_playing = (
             self.media_player.playbackState()
@@ -134,7 +142,11 @@ class PageVisualization(QWidget):
             self.controls_bar.set_playing(True)
 
     def _restart_media(self) -> None:
+        """Seek to the beginning of the media and play if it was stopped."""
         self.media_player.setPosition(0)
+        if self.media_player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
+            self.media_player.play()
+            self.controls_bar.set_playing(True)
 
     def _set_media_position(self, position: int) -> None:
         self.media_player.setPosition(position)

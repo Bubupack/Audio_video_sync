@@ -1,9 +1,10 @@
 """Video motion analysis split into focused, single-responsibility functions."""
 from typing import List, Tuple, Callable, Optional
 
+from pathlib import Path
+
 import cv2
 import numpy as np
-from pathlib import Path
 from scipy.signal import find_peaks
 
 from config.config import VideoConfig
@@ -37,7 +38,7 @@ def _compute_motion_scores(
         if not ret:
             raise RuntimeError(f"Cannot read first frame from {video_path}")
 
-        # Notification de démarrage du traitement
+        # Notify start of processing
         if on_start:
             on_start("Analyzing video motion", frame_count)
 
@@ -75,11 +76,11 @@ def _compute_motion_scores(
             prev_gray = gray
             frame_idx += 1
 
-            # Mise à jour de la progression vers le Worker (ex: toutes les 5 frames)
+            # Update progress to the Worker (e.g., every 10 frames or on the last frame)
             if on_progress and (frame_idx % 10 == 0 or frame_idx == frame_count):
                 on_progress(frame_idx)
 
-        # Notification de fin
+        # Notify end of processing
         if on_finish:
             on_finish()
 
@@ -117,8 +118,11 @@ def _ensure_peak_count(
         return peaks_indices
 
     missing = target_count - len(peaks_indices)
+    # Generate evenly spaced synthetic peaks, excluding the very first and last frames
     fictive = np.linspace(0, frame_total - 1, missing + 2, dtype=int)[1:-1]
     peaks_indices = np.sort(np.unique(np.concatenate([peaks_indices, fictive])))
+    
+    # Fallback padding if unique concatenation didn't yield enough
     while len(peaks_indices) < target_count:
         peaks_indices = np.append(peaks_indices, frame_total - 1)
     return peaks_indices
@@ -167,4 +171,6 @@ def get_video_pics(
         np.asarray(scores), target_count, fps, config.min_distance_ms
     )
     peaks_indices = _ensure_peak_count(peaks_indices, target_count, frame_count)
+    
+    # Convert frame indices to timestamps in milliseconds
     return [int(round(((idx + 1) / fps) * 1000)) for idx in peaks_indices]

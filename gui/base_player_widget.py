@@ -67,6 +67,7 @@ class BaseMediaPlayerWidget(QWidget):
         # --- Player → controls synchronisation ---
         self.media_player.positionChanged.connect(self._on_position_changed)
         self.media_player.durationChanged.connect(self._on_duration_changed)
+        self.media_player.mediaStatusChanged.connect(self._on_media_status_changed)
 
         self._build_ui()
 
@@ -160,8 +161,12 @@ class BaseMediaPlayerWidget(QWidget):
             self.controls_bar.set_playing(True)
 
     def restart_media(self) -> None:
-        """Seek to the beginning of the media."""
+        """Seek to the beginning of the media and play if it was stopped."""
         self.media_player.setPosition(0)
+        # If the video reached the end (StoppedState), restart playback automatically.
+        if self.media_player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
+            self.media_player.play()
+            self.controls_bar.set_playing(True)
 
     def reset(self) -> None:
         """Stop playback, unload media, and show the drop zone again."""
@@ -188,6 +193,13 @@ class BaseMediaPlayerWidget(QWidget):
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+    def _on_media_status_changed(self, status: QMediaPlayer.MediaStatus) -> None:
+        """Handle end-of-media to keep controls enabled and reset the play icon."""
+        if status == QMediaPlayer.MediaStatus.EndOfMedia:
+            # The video finished, but we want the user to be able to replay it.
+            # We keep the controls enabled and show the "Play" icon.
+            self.controls_bar.set_playing(False)
+
     def _open_file_dialog(self) -> None:
         file_name, _ = QFileDialog.getOpenFileName(
             self,

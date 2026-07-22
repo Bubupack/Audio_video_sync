@@ -1,0 +1,65 @@
+name: Build Executables
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest] # Ajout de macOS si désiré
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install FFmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y
+
+      - name: Install FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        # --windowed cache la console (idéal pour les apps GUI)
+        run: pyinstaller --windowed --name "AudioVideoSync" main.py
+
+      - name: Compress Build (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path dist/AudioVideoSync -DestinationPath AudioVideoSync-Windows.zip
+
+      - name: Compress Build (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czvf AudioVideoSync-Linux.tar.gz -C dist AudioVideoSync
+        
+      - name: Compress Build (macOS)
+        if: runner.os == 'macOS'
+        run: tar -czvf AudioVideoSync-macOS.tar.gz -C dist AudioVideoSync
+
+      - name: Upload Artifacts to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          # On utilise un joker pour ne cibler que le fichier généré par l'OS actuel
+          files: |
+            AudioVideoSync-*.zip
+            AudioVideoSync-*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

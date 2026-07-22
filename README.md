@@ -164,4 +164,4 @@ python main.py
 
 ## License
 
-Distributed under the GPL License.
+Distributed under the GNU General Public License v3.0 (GPLv3). See [LICENSE](LICENSE) for more information.

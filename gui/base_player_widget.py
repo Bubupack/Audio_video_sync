@@ -72,6 +72,9 @@ class BaseMediaPlayerWidget(QWidget):
     def _on_media_loaded(self, file_path: str) -> None:
         """Hook called once a file has been loaded (e.g. extract cover art)."""
 
+    def _on_reset(self) -> None:
+        """Hook called when the player is reset (override in subclasses if needed)."""
+
     def _file_filter(self) -> str:
         if self._media_type == "audio":
             return "Audio Files (*.mp3 *.wav *.flac *.aac)"
@@ -175,6 +178,34 @@ class BaseMediaPlayerWidget(QWidget):
 
     def restart_media(self) -> None:
         self.media_player.setPosition(0)
+
+    def reset(self) -> None:
+        """Reset player state, stop playback, unload media, and show DropZone."""
+        # 1. Stop playback & clear source
+        self.media_player.stop()
+        self.media_player.setSource(QUrl())
+        self._current_path = None
+
+        # 2. Reset drop zone state and switch layout view
+        self.drop_zone.reset()
+        self.media_layout.setCurrentWidget(self.drop_zone)
+
+        # 3. Disable controls and reset icons
+        self.btn_play.setEnabled(False)
+        self.btn_restart.setEnabled(False)
+
+        # 4. Reset slider and time label
+        self.slider_playback.blockSignals(True)
+        self.slider_playback.setRange(0, 0)
+        self.slider_playback.setValue(0)
+        self.slider_playback.setEnabled(False)
+        self.slider_playback.blockSignals(False)
+
+        self.time_label.setText("00:00 / 00:00")
+        self._set_play_icon(playing=False)
+
+        # 5. Execute subclass-specific reset logic
+        self._on_reset()
 
     # ------------------------------------------------------------------
     # Internal helpers

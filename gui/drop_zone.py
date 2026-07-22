@@ -86,6 +86,10 @@ class DropZone(QLabel):
         self._current_path = file_path
         self.path.emit(file_path)
 
+    def reset(self) -> None:
+        """Reset the drop zone state."""
+        self._current_path = None
+
     @property
     def current_path(self) -> Optional[str]:
         return self._current_path

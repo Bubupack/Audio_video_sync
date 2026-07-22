@@ -82,6 +82,16 @@ class AudioWidget(BaseMediaPlayerWidget):
         self.cover_label.setText("Loading cover art…")
         self._extract_cover(file_path)
 
+    def _on_reset(self) -> None:
+        """Reset audio-specific controls and cover art display."""
+        self.btn_mute.setEnabled(False)
+        self.slider_volume.setEnabled(False)
+        self.slider_volume.setValue(70)
+        self.volume_label.setText("70 %")
+        self._cover_pixmap = None
+        self.cover_label.clear()
+        self.cover_label.setText("")
+
     # ------------------------------------------------------------------
     # Cover-art extraction
     # ------------------------------------------------------------------

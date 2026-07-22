@@ -1,4 +1,3 @@
-
 # Audio-Video Sync
 
 Audio-Video Sync is a Python desktop application designed to automatically synchronize video motion peaks with audio beats. By leveraging **PyQt6**, **OpenCV**, and **Librosa**, the tool analyzes the rhythmic structure of an audio track and the visual motion vectors of a video, rendering a unified output where visual motion dynamically aligns with the music.
@@ -92,10 +91,43 @@ audio-video-sync/
 
 ## Installation
 
-### Requirements
+### Prerequisites
 
 * **Python 3.10+**
-* **FFmpeg**: Must be installed and present in system `PATH`.
+* **FFmpeg**: Required for audio/video decoding and final frame rendering. The `ffmpeg` binary must be installed and accessible in your system `PATH`.
+
+#### Installing FFmpeg
+
+* **Linux (Debian / Ubuntu)**:
+```bash
+sudo apt update && sudo apt install -y ffmpeg
+
+```
+
+
+* **Linux (Fedora / RHEL)**:
+```bash
+sudo dnf install ffmpeg
+
+```
+
+
+* **macOS (via Homebrew)**:
+```bash
+brew install ffmpeg
+
+```
+
+
+* **Windows**:
+Using Windows Package Manager (PowerShell / CMD):
+```powershell
+winget install ffmpeg
+
+```
+
+
+*Alternatively, download static builds manually from [ffmpeg.org](https://ffmpeg.org/download.html) and add the `bin/` directory to your System Environment Variables (`PATH`).*
 
 ### Setup Instructions
 
@@ -116,7 +148,7 @@ source .venv/bin/activate        # Linux / macOS
 ```
 
 
-3. Install required dependencies:
+3. Install required Python dependencies:
 ```bash
 pip install -r requirements.txt
 
@@ -164,4 +196,4 @@ python main.py
 
 ## License
 
-Distributed under the GNU General Public License v3.0 (GPLv3). See [LICENSE](LICENSE) for more information.
+Distributed under the GNU General Public License v3.0 (GPLv3). See [LICENSE](https://www.google.com/search?q=LICENSE) for more information.

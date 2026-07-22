@@ -1,4 +1,3 @@
-# gui/audio_widget.py
 """Audio player widget with embedded cover-art display and volume controls."""
 from __future__ import annotations
 
@@ -7,28 +6,23 @@ import logging
 from typing import List, Optional
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QPixmap
+from PyQt6.QtGui import QPixmap, QResizeEvent
 from PyQt6.QtMultimedia import QAudioOutput
-from PyQt6.QtWidgets import (
-    QLabel,
-    QPushButton,
-    QSizePolicy,
-    QSlider,
-    QStyle,
-    QWidget,
-)
+from PyQt6.QtWidgets import QLabel, QSizePolicy, QStyle, QWidget
 from mutagen import File
 from mutagen.flac import Picture
 
 from gui.base_player_widget import BaseMediaPlayerWidget
+from gui.media_controls import VolumeControlsBar
+from utils.utils import extract_embedded_cover
 
 logger = logging.getLogger(__name__)
 
 
 class AudioWidget(BaseMediaPlayerWidget):
-    """Audio player widget with cover art and volume controls."""
+    """Audio player widget displaying embedded cover art and volume controls."""
 
-    audio_loaded = BaseMediaPlayerWidget.media_loaded  # alias for clarity
+    audio_loaded = BaseMediaPlayerWidget.media_loaded  # semantic alias
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(media_type="audio", parent=parent)
@@ -52,42 +46,23 @@ class AudioWidget(BaseMediaPlayerWidget):
         self.media_player.setAudioOutput(self.audio_output)
 
     def _extra_controls(self) -> List[QWidget]:
-        # Mute toggle button
-        self.btn_mute = QPushButton(self)
-        self.btn_mute.setIcon(
-            self._std_icon(QStyle.StandardPixmap.SP_MediaVolume)
-        )
-        self.btn_mute.clicked.connect(self._toggle_mute)
-        self.btn_mute.setEnabled(False)
-
-        # Volume slider
-        self.slider_volume = QSlider(Qt.Orientation.Horizontal, self)
-        self.slider_volume.setRange(0, 100)
-        self.slider_volume.setValue(70)
-        self.slider_volume.valueChanged.connect(self._change_volume)
-        self.slider_volume.setEnabled(False)
-
-        # Volume label (0 to 100)
-        self.volume_label = QLabel(f"{self.slider_volume.value()} %", self)
-        self.volume_label.setFixedWidth(40)  # Keep it compact to avoid layout jumps
-
-        return [self.btn_mute, self.slider_volume, self.volume_label]
+        self.volume_bar = VolumeControlsBar(self)
+        self.volume_bar.volume_changed.connect(self._on_volume_changed)
+        self.volume_bar.mute_toggled.connect(self._toggle_mute)
+        self.volume_bar.set_enabled(False)
+        return [self.volume_bar]
 
     def _on_media_loaded(self, file_path: str) -> None:
-        # Enable audio-only controls and apply default volume.
-        self.btn_mute.setEnabled(True)
-        self.slider_volume.setEnabled(True)
-        self.audio_output.setVolume(self.slider_volume.value() / 100.0)
+        # Enable volume controls and apply the default volume.
+        self.volume_bar.set_enabled(True)
+        self.audio_output.setVolume(self.volume_bar.volume)
 
         self.cover_label.setText("Loading cover art…")
         self._extract_cover(file_path)
 
     def _on_reset(self) -> None:
-        """Reset audio-specific controls and cover art display."""
-        self.btn_mute.setEnabled(False)
-        self.slider_volume.setEnabled(False)
-        self.slider_volume.setValue(70)
-        self.volume_label.setText("70 %")
+        """Reset audio-specific controls and the cover-art display."""
+        self.volume_bar.reset()
         self._cover_pixmap = None
         self.cover_label.clear()
         self.cover_label.setText("")
@@ -96,13 +71,9 @@ class AudioWidget(BaseMediaPlayerWidget):
     # Cover-art extraction
     # ------------------------------------------------------------------
     def _extract_cover(self, file_path: str) -> None:
+        """Attempt to read embedded cover art from the audio file."""
         try:
-            audio = File(file_path)
-            if audio is None:
-                self.cover_label.setText("Cannot read file")
-                return
-
-            image_data = self._read_cover_bytes(audio)
+            image_data = extract_embedded_cover(file_path)
             if image_data:
                 pixmap = QPixmap()
                 if pixmap.loadFromData(image_data):
@@ -113,37 +84,13 @@ class AudioWidget(BaseMediaPlayerWidget):
 
             self._cover_pixmap = None
             self.cover_label.setText("No embedded cover art")
-        except Exception as exc:  # noqa: BLE001 — mutagen can raise many errors
+        except Exception as exc:
             logger.exception("Failed to extract cover art from %s", file_path)
             self._cover_pixmap = None
             self.cover_label.setText("Error reading cover art")
 
-    @staticmethod
-    def _read_cover_bytes(audio) -> Optional[bytes]:
-        # 1) Native pictures (FLAC, OGG with METADATA_BLOCK_PICTURE…)
-        if hasattr(audio, "pictures") and audio.pictures:
-            preferred = next((p for p in audio.pictures if p.type == 3), None)
-            return (preferred or audio.pictures[0]).data
-
-        # 2) ID3 APIC frames (MP3)
-        if audio.tags and hasattr(audio.tags, "keys"):
-            for key in audio.tags.keys():
-                if key.startswith("APIC"):
-                    return audio.tags[key].data
-
-        # 3) MP4 'covr' atom
-        tags = audio.tags if (hasattr(audio, "tags") and audio.tags) else audio
-        if tags and "covr" in tags:
-            return bytes(tags["covr"][0])
-
-        # 4) Base64-encoded FLAC picture in Vorbis comments
-        if "metadata_block_picture" in audio:
-            raw = base64.b64decode(audio["metadata_block_picture"][0])
-            return Picture(raw).data
-
-        return None
-
     def _refresh_cover(self) -> None:
+        """Re-scale the cover pixmap to fit the current label size."""
         if not self._cover_pixmap or self._cover_pixmap.isNull():
             return
         scaled = self._cover_pixmap.scaled(
@@ -154,41 +101,30 @@ class AudioWidget(BaseMediaPlayerWidget):
         self.cover_label.setPixmap(scaled)
 
     # ------------------------------------------------------------------
-    # Volume / mute
+    # Volume / mute handlers
     # ------------------------------------------------------------------
-    def _toggle_mute(self) -> None:
-        currently_muted = self.audio_output.isMuted()
-        self.audio_output.setMuted(not currently_muted)
-        self.btn_mute.setIcon(
-            self._std_icon(
-                QStyle.StandardPixmap.SP_MediaVolume
-                if currently_muted
-                else QStyle.StandardPixmap.SP_MediaVolumeMuted
-            )
-        )
-
-    def _change_volume(self, value: int) -> None:
-        volume = value / 100.0
+    def _on_volume_changed(self, volume: float) -> None:
         self.audio_output.setVolume(volume)
-        self.volume_label.setText(f"{value} %")
-
-        # Unmute automatically if the user pushes the slider above zero.
+        # Automatically unmute when the user raises the volume above zero.
         if volume > 0 and self.audio_output.isMuted():
             self.audio_output.setMuted(False)
-            self.btn_mute.setIcon(
-                self._std_icon(QStyle.StandardPixmap.SP_MediaVolume)
-            )
+            self.volume_bar.set_muted(False)
+
+    def _toggle_mute(self) -> None:
+        new_muted = not self.audio_output.isMuted()
+        self.audio_output.setMuted(new_muted)
+        self.volume_bar.set_muted(new_muted)
 
     # ------------------------------------------------------------------
     # Events
     # ------------------------------------------------------------------
-    def resizeEvent(self, event) -> None:
+    def resizeEvent(self, event: QResizeEvent) -> None:
         super().resizeEvent(event)
         self._refresh_cover()
 
-    #------------------------------------------------------------------
+    # ------------------------------------------------------------------
     # Public API
-    #------------------------------------------------------------------
+    # ------------------------------------------------------------------
     def get_cover_pixmap(self) -> Optional[QPixmap]:
-        """Retourne la pochette audio courante sous forme de QPixmap."""
+        """Return the current cover-art pixmap (or ``None`` if not available)."""
         return self._cover_pixmap

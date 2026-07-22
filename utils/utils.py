@@ -1,19 +1,24 @@
 """Small utility helpers shared across modules."""
+from __future__ import annotations
+
+import base64
+import logging
 import re
 from pathlib import Path
 from typing import Optional
-from PyQt6.QtGui import QImage, QPixmap
+
 import cv2
-import base64
+from PyQt6.QtGui import QImage, QPixmap
 from mutagen import File
 from mutagen.flac import Picture
-import logging
+
 from config.config import (
     FILESYSTEM_MAX_STEM_LENGTH,
     INVALID_FILENAME_CHARS_REGEX,
 )
 
 logger = logging.getLogger(__name__)
+
 
 def format_time(seconds: float) -> str:
     """Format a duration in seconds into a human-readable string.
@@ -118,57 +123,75 @@ def get_unique_output_path(directory: Path, stem: str, suffix: str) -> Path:
             return new_path
         counter += 1
 
-def _read_video_cover_bytes(video_path: str) -> Optional[bytes]:
-    """Tente d'extraire les octets d'une pochette/miniature intégrée dans les métadonnées de la vidéo."""
+
+def extract_embedded_cover(file_path: str) -> Optional[bytes]:
+    """Extract raw cover-art bytes from any media file supported by mutagen.
+
+    Supports:
+    1. Native pictures (FLAC, OGG with METADATA_BLOCK_PICTURE).
+    2. ID3 APIC frames (MP3).
+    3. MP4 'covr' atom.
+    4. Base64-encoded FLAC picture in Vorbis comments.
+
+    Args:
+        file_path: Path to the media file.
+
+    Returns:
+        Raw image bytes if a cover is found, otherwise None.
+    """
     try:
-        video = File(video_path)
-        if video is None:
+        media = File(file_path)
+        if media is None:
             return None
 
-        # 1. MP4 / MOV (atome 'covr')
-        tags = getattr(video, "tags", None) or video
+        # 1. Native pictures (FLAC, OGG with METADATA_BLOCK_PICTURE)
+        if hasattr(media, "pictures") and media.pictures:
+            # Prefer front cover (type 3), fallback to first available
+            preferred = next((p for p in media.pictures if p.type == 3), None)
+            return (preferred or media.pictures[0]).data
+
+        # 2. ID3 APIC frames (MP3)
+        if media.tags and hasattr(media.tags, "keys"):
+            for key in media.tags.keys():
+                if key.startswith("APIC"):
+                    return media.tags[key].data
+
+        # 3. MP4 'covr' atom
+        tags = media.tags if (hasattr(media, "tags") and media.tags) else media
         if tags and "covr" in tags:
             return bytes(tags["covr"][0])
 
-        # 2. Images natives / pièces jointes (ex: MKV, OGV)
-        if hasattr(video, "pictures") and video.pictures:
-            preferred = next((p for p in video.pictures if p.type == 3), None)
-            return (preferred or video.pictures[0]).data
-
-        # 3. Trame ID3 APIC (si présente dans certains conteneurs)
-        if tags and hasattr(tags, "keys"):
-            for key in tags.keys():
-                if key.startswith("APIC"):
-                    return tags[key].data
-
-        # 4. Bloc d'image Vorbis/FLAC encodé en Base64
-        if "metadata_block_picture" in video:
-            raw = base64.b64decode(video["metadata_block_picture"][0])
+        # 4. Base64-encoded FLAC picture in Vorbis comments
+        if "metadata_block_picture" in media:
+            raw = base64.b64decode(media["metadata_block_picture"][0])
             return Picture(raw).data
 
     except Exception:
-        logger.debug("Aucune métadonnée d'image trouvée dans %s", video_path)
+        logger.debug("No embedded cover art found in %s", file_path)
 
     return None
 
 
 def extract_video_thumbnail(video_path: str) -> Optional[QPixmap]:
-    """Extrait la pochette/miniature intégrée de la vidéo si elle existe.
+    """Extract the embedded cover art or capture the first video frame.
 
-    Si aucune pochette n'est trouvée, extrait la première image (frame) de la vidéo via OpenCV.
+    Tries to read an embedded cover from metadata first. If none is found,
+    falls back to capturing the first frame of the video via OpenCV.
+
+    Args:
+        video_path: Path to the video file.
+
+    Returns:
+        A QPixmap of the cover/thumbnail, or None if extraction fails.
     """
-    # ------------------------------------------------------------------
-    # 1. Tentative d'extraction depuis les métadonnées du fichier
-    # ------------------------------------------------------------------
-    cover_bytes = _read_video_cover_bytes(video_path)
+    # 1. Attempt extraction from file metadata
+    cover_bytes = extract_embedded_cover(video_path)
     if cover_bytes:
         pixmap = QPixmap()
         if pixmap.loadFromData(cover_bytes):
             return pixmap
 
-    # ------------------------------------------------------------------
-    # 2. Fallback : Capture de la première frame de la vidéo via OpenCV
-    # ------------------------------------------------------------------
+    # 2. Fallback: Capture the first frame via OpenCV
     try:
         cap = cv2.VideoCapture(video_path)
         ret, frame = cap.read()
@@ -177,16 +200,19 @@ def extract_video_thumbnail(video_path: str) -> Optional[QPixmap]:
         if not ret or frame is None:
             return None
 
-        # Conversion BGR (OpenCV) vers RGB (Qt)
+        # Convert BGR (OpenCV) to RGB (Qt)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = frame_rgb.shape
         bytes_per_line = ch * w
 
+        # Create QImage from numpy array buffer
         q_image = QImage(
             frame_rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888
         )
-        return QPixmap.fromImage(q_image)
+        # CRITICAL: Copy the image data so it remains valid if the numpy
+        # array is garbage-collected before the QPixmap is displayed.
+        return QPixmap.fromImage(q_image.copy())
 
     except Exception as exc:
-        logger.error("Échec de l'extraction de la frame vidéo pour %s: %s", video_path, exc)
+        logger.error("Failed to extract video frame for %s: %s", video_path, exc)
         return None

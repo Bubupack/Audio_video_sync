@@ -1,31 +1,38 @@
-# gui/base_player_widget.py
-"""Abstract base widget that encapsulates the shared media-player logic."""
+"""Abstract base widget encapsulating shared media-player logic.
+
+Subclasses must implement :meth:`_create_display_widget` and
+:meth:`_configure_player`.  Optional hooks (:meth:`_extra_controls`,
+:meth:`_on_media_loaded`, :meth:`_on_reset`) allow fine-grained
+customisation.
+"""
 from __future__ import annotations
 
 from abc import abstractmethod
 from typing import List, Optional
 
 from PyQt6.QtCore import QUrl, Qt, pyqtSignal
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QResizeEvent
+from PyQt6.QtMultimedia import QMediaPlayer
 from PyQt6.QtWidgets import (
     QFileDialog,
-    QHBoxLayout,
-    QLabel,
     QPushButton,
-    QSizePolicy,
-    QSlider,
     QStackedLayout,
-    QStyle,
     QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtMultimedia import QMediaPlayer
 
 from gui.drop_zone import DropZone
+from gui.media_controls import MediaControlsBar
 
 
 class BaseMediaPlayerWidget(QWidget):
-    """Common scaffolding for audio/video playback widgets."""
+    """Common scaffolding for audio/video playback widgets.
+
+    The widget displays a :class:`DropZone` until a file is loaded, then
+    swaps to the subclass-provided display surface.  Playback controls
+    (play / pause / restart / position slider / time label) are provided
+    by a reusable :class:`MediaControlsBar`.
+    """
 
     media_loaded = pyqtSignal(str)
 
@@ -38,44 +45,53 @@ class BaseMediaPlayerWidget(QWidget):
         self._media_type = media_type
         self._current_path: Optional[str] = None
 
-        # Core Qt media player (no audio output by default → videos are silent)
+        # --- Core Qt media player ---
         self.media_player = QMediaPlayer(self)
 
-        # Drop zone + display surface (provided by subclasses)
+        # --- Drop zone (drag-and-drop file input) ---
         self.drop_zone = DropZone(media_type=media_type, parent=self)
         self.drop_zone.path.connect(self.load_media)
+
+        # --- Display surface (provided by subclass) ---
         self.display_widget = self._create_display_widget()
 
-        # Subclass-specific player configuration (audio output, video output…)
+        # --- Subclass-specific player configuration ---
         self._configure_player()
 
-        # Player → UI synchronisation
+        # --- Reusable playback controls ---
+        self.controls_bar = MediaControlsBar(self)
+        self.controls_bar.play_toggled.connect(self.toggle_play)
+        self.controls_bar.restart_requested.connect(self.restart_media)
+        self.controls_bar.position_seeked.connect(self._set_media_position)
+
+        # --- Player → controls synchronisation ---
         self.media_player.positionChanged.connect(self._on_position_changed)
         self.media_player.durationChanged.connect(self._on_duration_changed)
 
         self._build_ui()
 
     # ------------------------------------------------------------------
-    # Hooks to be overridden by subclasses
+    # Hooks for subclasses
     # ------------------------------------------------------------------
     @abstractmethod
     def _create_display_widget(self) -> QWidget:
-        """Return the widget used to display the media (video surface, cover art…)."""
+        """Return the widget used to display the media (video surface, cover art, …)."""
 
     def _configure_player(self) -> None:
-        """Optional setup (e.g. attach audio/video output to the player)."""
+        """Optional setup — e.g. attach audio/video output to the player."""
 
     def _extra_controls(self) -> List[QWidget]:
-        """Return additional widgets to insert next to play/restart buttons."""
+        """Return additional widgets to insert into the controls row."""
         return []
 
     def _on_media_loaded(self, file_path: str) -> None:
-        """Hook called once a file has been loaded (e.g. extract cover art)."""
+        """Hook called once a file has been loaded."""
 
     def _on_reset(self) -> None:
-        """Hook called when the player is reset (override in subclasses if needed)."""
+        """Hook called when the player is reset."""
 
     def _file_filter(self) -> str:
+        """Return the file dialog filter for the current media type."""
         if self._media_type == "audio":
             return "Audio Files (*.mp3 *.wav *.flac *.aac)"
         return "Video Files (*.mp4 *.mkv *.avi *.mov)"
@@ -84,63 +100,28 @@ class BaseMediaPlayerWidget(QWidget):
     # UI construction
     # ------------------------------------------------------------------
     def _build_ui(self) -> None:
-        # Open file button
-        self.btn_open = QPushButton("Open file", self)
-        self.btn_open.clicked.connect(self._open_file_dialog)
+        # --- Open-file button ---
+        self.open_button = QPushButton("Open file", self)
+        self.open_button.clicked.connect(self._open_file_dialog)
 
-        # Play / Pause button
-        self.btn_play = QPushButton(self)
-        self.btn_play.setIcon(self._std_icon(QStyle.StandardPixmap.SP_MediaPlay))
-        self.btn_play.clicked.connect(self.toggle_play)
-        self.btn_play.setEnabled(False)
-
-        # Restart button
-        self.btn_restart = QPushButton(self)
-        self.btn_restart.setIcon(
-            self._std_icon(QStyle.StandardPixmap.SP_MediaSkipBackward)
-        )
-        self.btn_restart.clicked.connect(self.restart_media)
-        self.btn_restart.setEnabled(False)
-
-        # Playback slider
-        # We use valueChanged to allow seeking by clicking directly on the slider.
-        # The player update uses blockSignals to avoid feedback loops.
-        self.slider_playback = QSlider(Qt.Orientation.Horizontal, self)
-        self.slider_playback.setRange(0, 0)
-        self.slider_playback.setEnabled(False)
-        self.slider_playback.valueChanged.connect(self._set_media_position)
-
-        # Time label (Current / Total)
-        self.time_label = QLabel("00:00 / 00:00", self)
-        
-        # Playback slider row
-        slider_layout = QHBoxLayout()
-        slider_layout.addWidget(self.slider_playback, stretch=1)
-        slider_layout.addWidget(self.time_label)
-
-        # Controls row (extra controls inserted between play and the right edge)
-        controls_row = QHBoxLayout()
-        controls_row.addWidget(self.btn_restart)
-        controls_row.addWidget(self.btn_play)
+        # --- Insert subclass-provided extra controls ---
         for extra in self._extra_controls():
-            controls_row.addWidget(extra, stretch=1)
+            self.controls_bar.add_control(extra, stretch=1)
 
-        # Main controls layout
+        # --- Controls layout ---
         controls_layout = QVBoxLayout()
-        controls_layout.addLayout(slider_layout)
-        controls_layout.addLayout(controls_row)
-        controls_layout.addWidget(self.btn_open)
-        controls_layout.addStretch(1)  # Prevent controls from stretching vertically
+        controls_layout.addWidget(self.controls_bar)
+        controls_layout.addWidget(self.open_button)
+        controls_layout.addStretch(1)
 
-        # Media container using QStackedLayout to seamlessly swap widgets
-        # without triggering layout jumps or resizing bugs.
+        # --- Media container (stacked: drop zone ↔ display surface) ---
         self.media_container = QWidget(self)
         self.media_layout = QStackedLayout(self.media_container)
         self.media_layout.addWidget(self.drop_zone)
         self.media_layout.addWidget(self.display_widget)
         self.media_layout.setCurrentWidget(self.drop_zone)
 
-        # Main layout
+        # --- Main layout ---
         self.main_layout = QVBoxLayout(self)
         self.main_layout.addWidget(self.media_container)
         self.main_layout.addLayout(controls_layout)
@@ -149,63 +130,60 @@ class BaseMediaPlayerWidget(QWidget):
     # Public API
     # ------------------------------------------------------------------
     def load_media(self, file_path: str) -> None:
+        """Load a media file, swap the display surface, and start playback."""
         self._current_path = file_path
         self.media_loaded.emit(file_path)
 
-        # Swap drop zone for the display surface seamlessly
+        # Swap drop zone → display surface
         self.media_layout.setCurrentWidget(self.display_widget)
 
-        self.btn_play.setEnabled(True)
-        self.btn_restart.setEnabled(True)
-        self.slider_playback.setEnabled(True)
+        # Enable playback controls
+        self.controls_bar.set_enabled(True)
 
+        # Load and play
         self.media_player.setSource(QUrl.fromLocalFile(file_path))
         self._on_media_loaded(file_path)
         self.media_player.play()
-        self._set_play_icon(playing=True)
+        self.controls_bar.set_playing(True)
 
     def toggle_play(self) -> None:
+        """Toggle between play and pause states."""
         is_playing = (
             self.media_player.playbackState()
             == QMediaPlayer.PlaybackState.PlayingState
         )
         if is_playing:
             self.media_player.pause()
-            self._set_play_icon(playing=False)
+            self.controls_bar.set_playing(False)
         else:
             self.media_player.play()
-            self._set_play_icon(playing=True)
+            self.controls_bar.set_playing(True)
 
     def restart_media(self) -> None:
+        """Seek to the beginning of the media."""
         self.media_player.setPosition(0)
 
     def reset(self) -> None:
-        """Reset player state, stop playback, unload media, and show DropZone."""
-        # 1. Stop playback & clear source
+        """Stop playback, unload media, and show the drop zone again."""
+        # 1. Stop playback and clear the source
         self.media_player.stop()
         self.media_player.setSource(QUrl())
         self._current_path = None
 
-        # 2. Reset drop zone state and switch layout view
+        # 2. Reset drop zone and switch the stacked layout
         self.drop_zone.reset()
         self.media_layout.setCurrentWidget(self.drop_zone)
 
-        # 3. Disable controls and reset icons
-        self.btn_play.setEnabled(False)
-        self.btn_restart.setEnabled(False)
+        # 3. Reset the controls bar
+        self.controls_bar.reset()
 
-        # 4. Reset slider and time label
-        self.slider_playback.blockSignals(True)
-        self.slider_playback.setRange(0, 0)
-        self.slider_playback.setValue(0)
-        self.slider_playback.setEnabled(False)
-        self.slider_playback.blockSignals(False)
-
-        self.time_label.setText("00:00 / 00:00")
-        self._set_play_icon(playing=False)
-
-        # 5. Execute subclass-specific reset logic
+        # 4. Subclass-specific reset
         self._on_reset()
+
+    @property
+    def current_path(self) -> Optional[str]:
+        """Return the path of the currently loaded media file."""
+        return self._current_path
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -220,47 +198,24 @@ class BaseMediaPlayerWidget(QWidget):
         if file_name:
             self.load_media(file_name)
 
-    def _std_icon(self, pixmap: QStyle.StandardPixmap) -> QIcon:
-        return self.style().standardIcon(pixmap)
-
-    def _set_play_icon(self, playing: bool) -> None:
-        icon = (
-            QStyle.StandardPixmap.SP_MediaPause
-            if playing
-            else QStyle.StandardPixmap.SP_MediaPlay
-        )
-        self.btn_play.setIcon(self._std_icon(icon))
-
-    def _format_time(self, ms: int) -> str:
-        """Converts milliseconds to a mm:ss string format."""
-        seconds = int(ms / 1000)
-        m, s = divmod(seconds, 60)
-        return f"{m:02d}:{s:02d}"
-
-    def _update_time_label(self, position: int, duration: int) -> None:
-        self.time_label.setText(
-            f"{self._format_time(position)} / {self._format_time(duration)}"
-        )
-
     def _on_position_changed(self, position: int) -> None:
-        # Block signals so we don't trigger valueChanged -> setPosition loop.
-        self.slider_playback.blockSignals(True)
-        self.slider_playback.setValue(position)
-        self.slider_playback.blockSignals(False)
-        self._update_time_label(position, self.media_player.duration())
+        self.controls_bar.update_position(position)
+        self.controls_bar.update_time_label(position, self.media_player.duration())
 
     def _on_duration_changed(self, duration: int) -> None:
-        self.slider_playback.setRange(0, duration)
-        self._update_time_label(self.slider_playback.value(), duration)
+        self.controls_bar.update_duration(duration)
+        self.controls_bar.update_time_label(
+            self.controls_bar.current_position, duration
+        )
 
     def _set_media_position(self, position: int) -> None:
         self.media_player.setPosition(position)
-        self._update_time_label(position, self.media_player.duration())
+        self.controls_bar.update_time_label(position, self.media_player.duration())
 
     # ------------------------------------------------------------------
     # Events
     # ------------------------------------------------------------------
-    def resizeEvent(self, event) -> None:
+    def resizeEvent(self, event: QResizeEvent) -> None:
         """Force the display area to a strict 16:9 aspect ratio."""
         super().resizeEvent(event)
         target_height = int(self.width() * 9 / 16)

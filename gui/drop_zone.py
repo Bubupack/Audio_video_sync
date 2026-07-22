@@ -1,4 +1,3 @@
-# gui/drop_zone.py
 """Drag-and-drop area that accepts a single audio or video file."""
 from __future__ import annotations
 
@@ -7,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QDragEnterEvent, QDropEvent
 from PyQt6.QtWidgets import QLabel, QWidget
 
 from config.config import VALID_AUDIO_EXTS, VALID_VIDEO_EXTS
@@ -19,9 +19,25 @@ _VALID_EXTENSIONS = {
     "video": VALID_VIDEO_EXTS,
 }
 
+_DROP_ZONE_STYLE = """
+    QLabel {
+        border: 2px dashed #aaa;
+        border-radius: 8px;
+        background-color: #f0f0f0;
+        color: #555;
+        font-size: 14px;
+    }
+"""
+
 
 class DropZone(QLabel):
-    """A QLabel-based drop area restricted to one media type."""
+    """A QLabel-based drop area restricted to one media type.
+
+    Signals
+    -------
+    path(str)
+        Emitted when a valid file is dropped or loaded programmatically.
+    """
 
     path = pyqtSignal(str)
 
@@ -37,33 +53,26 @@ class DropZone(QLabel):
         self._current_path: Optional[str] = None
         self._build_ui()
 
+    # ------------------------------------------------------------------
+    # UI construction
+    # ------------------------------------------------------------------
     def _build_ui(self) -> None:
         self.setText(
             f"Drag & drop your {self._media_type} here\n"
             f"or use the button below"
         )
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setStyleSheet(
-            """
-            QLabel {
-                border: 2px dashed #aaa;
-                border-radius: 8px;
-                background-color: #f0f0f0;
-                color: #555;
-                font-size: 14px;
-            }
-            """
-        )
+        self.setStyleSheet(_DROP_ZONE_STYLE)
         self.setAcceptDrops(True)
 
     # ------------------------------------------------------------------
     # Drag & drop events
     # ------------------------------------------------------------------
-    def dragEnterEvent(self, event) -> None:
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
 
-    def dropEvent(self, event) -> None:
+    def dropEvent(self, event: QDropEvent) -> None:
         urls = event.mimeData().urls()
         if not urls:
             return
@@ -83,13 +92,15 @@ class DropZone(QLabel):
     # Public API
     # ------------------------------------------------------------------
     def load(self, file_path: str) -> None:
+        """Store the path and emit the ``path`` signal."""
         self._current_path = file_path
         self.path.emit(file_path)
 
     def reset(self) -> None:
-        """Reset the drop zone state."""
+        """Clear the stored path."""
         self._current_path = None
 
     @property
     def current_path(self) -> Optional[str]:
+        """Return the currently loaded file path (or ``None``)."""
         return self._current_path

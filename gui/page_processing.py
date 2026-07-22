@@ -102,6 +102,7 @@ class PageProcessing(QWidget):
 
     def set_status(self, text: str) -> None:
         self.label_status.setText(text)
+        
     def reset_ui(self) -> None:
         self.progress_bar.setValue(0)
         self.lbl_percentage.setText("0%")

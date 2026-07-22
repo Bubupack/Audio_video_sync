@@ -14,6 +14,7 @@ from gui.video_widget import VideoWidget
 from gui.outputDir_widget import OutputDirWidget
 from config.config import DEFAULT_OUTPUT_DIR
 from gui.page_processing import PageProcessing
+from gui.page_visualisation import PageVisualisation
 logger = logging.getLogger(__name__)
 
 
@@ -28,12 +29,14 @@ class MainWindow(QMainWindow):
 
         self.page_config = PageConfig()
         self.page_processing = PageProcessing()
+        self.page_visu = PageVisualisation()
 
         self.pages.addWidget(self.page_config)
         self.pages.addWidget(self.page_processing)
+        self.pages.addWidget(self.page_visu)
 
         self.page_config.start_requested.connect(self._start_processing)
-
+        self.page_visu.sync_another_requested.connect(self._restart_app)
         # Variables pour le thread
         self._thread: QThread | None = None
         self._worker: ProcessingWorker | None = None
@@ -79,12 +82,9 @@ class MainWindow(QMainWindow):
         self._thread.start()
 
     def _on_processing_finished(self) -> None:
-        logger.info("Traitement terminé avec succès !")
-        QMessageBox.information(
-            self, "Succès", "La vidéo resynchronisée a été générée avec succès !"
-        )
-        # Retour à la page de configuration (ou vers une future page de résultats)
-        self.pages.setCurrentWidget(self.page_config)
+        logger.info("Traitement terminé !")
+        self.page_visu.set_video(str(self.output_path))
+        self.stacked_widget.setCurrentWidget(self.page_visu)
 
     def _on_processing_error(self, err_msg: str) -> None:
         logger.error("Erreur durant le traitement : %s", err_msg)
@@ -94,3 +94,8 @@ class MainWindow(QMainWindow):
         if self._thread and self._thread.isRunning():
             self._thread.quit()
         self.pages.setCurrentWidget(self.page_config)
+
+    def _restart_app(self) -> None:
+        self.page_visu.reset_ui()
+        self.page_config.reset()
+        self.stacked_widget.setCurrentWidget(self.page_config)

@@ -4,12 +4,16 @@ from pathlib import Path
 from typing import Optional
 from PyQt6.QtGui import QImage, QPixmap
 import cv2
-
+import base64
+from mutagen import File
+from mutagen.flac import Picture
+import logging
 from config.config import (
     FILESYSTEM_MAX_STEM_LENGTH,
     INVALID_FILENAME_CHARS_REGEX,
 )
 
+logger = logging.getLogger(__name__)
 
 def format_time(seconds: float) -> str:
     """Format a duration in seconds into a human-readable string.
@@ -114,22 +118,75 @@ def get_unique_output_path(directory: Path, stem: str, suffix: str) -> Path:
             return new_path
         counter += 1
 
+def _read_video_cover_bytes(video_path: str) -> Optional[bytes]:
+    """Tente d'extraire les octets d'une pochette/miniature intégrée dans les métadonnées de la vidéo."""
+    try:
+        video = File(video_path)
+        if video is None:
+            return None
+
+        # 1. MP4 / MOV (atome 'covr')
+        tags = getattr(video, "tags", None) or video
+        if tags and "covr" in tags:
+            return bytes(tags["covr"][0])
+
+        # 2. Images natives / pièces jointes (ex: MKV, OGV)
+        if hasattr(video, "pictures") and video.pictures:
+            preferred = next((p for p in video.pictures if p.type == 3), None)
+            return (preferred or video.pictures[0]).data
+
+        # 3. Trame ID3 APIC (si présente dans certains conteneurs)
+        if tags and hasattr(tags, "keys"):
+            for key in tags.keys():
+                if key.startswith("APIC"):
+                    return tags[key].data
+
+        # 4. Bloc d'image Vorbis/FLAC encodé en Base64
+        if "metadata_block_picture" in video:
+            raw = base64.b64decode(video["metadata_block_picture"][0])
+            return Picture(raw).data
+
+    except Exception:
+        logger.debug("Aucune métadonnée d'image trouvée dans %s", video_path)
+
+    return None
+
+
 def extract_video_thumbnail(video_path: str) -> Optional[QPixmap]:
-    """Extract the first frame of a video as a QPixmap thumbnail."""
+    """Extrait la pochette/miniature intégrée de la vidéo si elle existe.
+
+    Si aucune pochette n'est trouvée, extrait la première image (frame) de la vidéo via OpenCV.
+    """
+    # ------------------------------------------------------------------
+    # 1. Tentative d'extraction depuis les métadonnées du fichier
+    # ------------------------------------------------------------------
+    cover_bytes = _read_video_cover_bytes(video_path)
+    if cover_bytes:
+        pixmap = QPixmap()
+        if pixmap.loadFromData(cover_bytes):
+            return pixmap
+
+    # ------------------------------------------------------------------
+    # 2. Fallback : Capture de la première frame de la vidéo via OpenCV
+    # ------------------------------------------------------------------
     try:
         cap = cv2.VideoCapture(video_path)
         ret, frame = cap.read()
         cap.release()
-        
+
         if not ret or frame is None:
             return None
-            
+
         # Conversion BGR (OpenCV) vers RGB (Qt)
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w, ch = frame_rgb.shape
         bytes_per_line = ch * w
-        
-        q_image = QImage(frame_rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888)
+
+        q_image = QImage(
+            frame_rgb.data, w, h, bytes_per_line, QImage.Format.Format_RGB888
+        )
         return QPixmap.fromImage(q_image)
-    except Exception:
+
+    except Exception as exc:
+        logger.error("Échec de l'extraction de la frame vidéo pour %s: %s", video_path, exc)
         return None

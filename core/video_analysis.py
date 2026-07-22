@@ -7,7 +7,7 @@ from pathlib import Path
 from scipy.signal import find_peaks
 
 from config.config import VideoConfig
-from core.progress import ProgressBar
+
 
 def _compute_resize_target(
     original_width: int, original_height: int, target_width: int
@@ -20,7 +20,12 @@ def _compute_resize_target(
 
 
 def _compute_motion_scores(
-    video_path: Path, frame_count: int, config: VideoConfig
+    video_path: Path,
+    frame_count: int,
+    config: VideoConfig,
+    on_start: Optional[Callable[[str, int], None]] = None,
+    on_progress: Optional[Callable[[int], None]] = None,
+    on_finish: Optional[Callable[[], None]] = None,
 ) -> List[float]:
     """Read the video and compute a per-frame motion magnitude score."""
     cap = cv2.VideoCapture(str(video_path))
@@ -32,6 +37,10 @@ def _compute_motion_scores(
         if not ret:
             raise RuntimeError(f"Cannot read first frame from {video_path}")
 
+        # Notification de démarrage du traitement
+        if on_start:
+            on_start("Analyzing video motion...", frame_count)
+
         target_w, target_h = _compute_resize_target(
             first_frame.shape[1], first_frame.shape[0], config.target_width
         )
@@ -40,7 +49,6 @@ def _compute_motion_scores(
         )
 
         scores: List[float] = []
-        bar = ProgressBar("Motion analysis", frame_count)
         frame_idx = 1
 
         while True:
@@ -51,7 +59,9 @@ def _compute_motion_scores(
             gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
 
             flow = cv2.calcOpticalFlowFarneback(
-                prev_gray, gray, None,
+                prev_gray,
+                gray,
+                None,
                 config.farneback_pyr_scale,
                 config.farneback_levels,
                 config.farneback_winsize,
@@ -65,10 +75,14 @@ def _compute_motion_scores(
             prev_gray = gray
             frame_idx += 1
 
-            if frame_idx % 30 == 0:
-                bar.update(frame_idx)
+            # Mise à jour de la progression vers le Worker (ex: toutes les 5 frames)
+            if on_progress and (frame_idx % 5 == 0 or frame_idx == frame_count):
+                on_progress(frame_idx)
 
-        bar.finish()
+        # Notification de fin
+        if on_finish:
+            on_finish()
+
         return scores
     finally:
         cap.release()
@@ -128,6 +142,9 @@ def get_video_pics(
         fps: Frames per second of the video.
         target_count: Desired number of peaks.
         config: Video-analysis parameters.
+        on_start: Optional callback function triggered at the beginning.
+        on_progress: Optional callback function for progress updates.
+        on_finish: Optional callback function triggered when finished.
 
     Returns:
         List of peak timestamps in milliseconds.
@@ -135,7 +152,14 @@ def get_video_pics(
     if fps == 0:
         return []
 
-    scores = _compute_motion_scores(video_path, frame_count, config)
+    scores = _compute_motion_scores(
+        video_path=video_path,
+        frame_count=frame_count,
+        config=config,
+        on_start=on_start,
+        on_progress=on_progress,
+        on_finish=on_finish,
+    )
     if not scores:
         return []
 

@@ -84,11 +84,11 @@ class PageVisualisation(QWidget):
         slider_layout.addWidget(self.time_label)
 
         controls_row = QHBoxLayout()
-        controls_row.addWidget(self.btn_restart)
-        controls_row.addWidget(self.btn_play)
-        controls_row.addWidget(self.btn_mute)
-        controls_row.addWidget(self.slider_volume)
-        controls_row.addWidget(self.volume_label)
+        controls_row.addWidget(self.btn_restart, stretch=2)
+        controls_row.addWidget(self.btn_play, stretch=2)
+        controls_row.addWidget(self.btn_mute, stretch=2)
+        controls_row.addWidget(self.slider_volume, stretch=4)
+        controls_row.addWidget(self.volume_label, stretch=1)
 
         # --- Information de sortie et bouton d'action ---
         self.lbl_output_path = QLabel("Fichier de sortie : Aucun", self)

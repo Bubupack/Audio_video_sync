@@ -19,7 +19,7 @@ class ProcessingWorker(QObject):
 
     progress = pyqtSignal(int)
     status = pyqtSignal(str)
-    finished = pyqtSignal()
+    finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
     def __init__(self, video_path: str, audio_path: str, output_dir: str) -> None:
@@ -42,13 +42,13 @@ class ProcessingWorker(QObject):
                 Process exit code (0 on success, non-zero on error).
             """
             try:
-                output = self.run_pipeline()
-                logger.info("Final video saved at: %s", output.resolve())
+                output_path = self.run_pipeline()
+                logger.info("Final video saved at: %s", output_path.resolve())
                 self.curent_progress = 100
                 self.progress.emit(100)
                 self.curent_status = "Finished"
                 self.status.emit("Finised")
-                self.finished.emit()
+                self.finished.emit(str(output_path.resolve()))
                 return 0
             except FileNotFoundError as e:
                 logger.error("Input file error: %s", e)

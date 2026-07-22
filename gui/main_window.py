@@ -81,10 +81,10 @@ class MainWindow(QMainWindow):
         # 4. Lancement du thread
         self._thread.start()
 
-    def _on_processing_finished(self) -> None:
+    def _on_processing_finished(self, generated_video_path:str) -> None:
         logger.info("Traitement terminé !")
-        self.page_visu.set_video(str(self.output_path))
-        self.stacked_widget.setCurrentWidget(self.page_visu)
+        self.page_visu.set_video(generated_video_path)
+        self.pages.setCurrentWidget(self.page_visu)
 
     def _on_processing_error(self, err_msg: str) -> None:
         logger.error("Erreur durant le traitement : %s", err_msg)
@@ -98,4 +98,4 @@ class MainWindow(QMainWindow):
     def _restart_app(self) -> None:
         self.page_visu.reset_ui()
         self.page_config.reset()
-        self.stacked_widget.setCurrentWidget(self.page_config)
+        self.pages.setCurrentWidget(self.page_config)

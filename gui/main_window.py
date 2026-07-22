@@ -6,6 +6,7 @@ import logging
 
 from PyQt6.QtWidgets import QHBoxLayout, QMainWindow, QVBoxLayout, QWidget
 
+from gui.PageConfig import PageConfig
 from gui.audio_widget import AudioWidget
 from gui.video_widget import VideoWidget
 from gui.outputDir_widget import OutputDirWidget
@@ -25,31 +26,16 @@ class MainWindow(QMainWindow):
         self.output_directory: str = DEFAULT_OUTPUT_DIR
 
         # Instantiate the two players
-        self.video_player = VideoWidget(self)
-        self.audio_player = AudioWidget(self)
+        self.PageConfig = PageConfig()
 
         # Forward media-loaded signals
-        self.video_player.video_loaded.connect(self._on_video_received)
-        self.audio_player.audio_loaded.connect(self._on_audio_received)
+        self.PageConfig.video_path.connect(self._on_video_received)
+        self.PageConfig.audio_path.connect(self._on_audio_received)
+        self.PageConfig.output_directory.connect(self._on_output_directory_changed)
 
-        # Output directory widget
-        self.output_dir_widget = OutputDirWidget()
-
-        # Connect the output directory signal to a handler
-        self.output_dir_widget.output_directory.connect(self._on_output_directory_changed)
-
-        # Add the output directory widget to the main layout
-        # Side-by-side layout (50% / 50%)
-        side_by_side = QHBoxLayout()
-        side_by_side.addWidget(self.video_player, stretch=1)
-        side_by_side.addWidget(self.audio_player, stretch=1)
-
-        # Top-aligned main layout
         main_layout = QVBoxLayout()
-        main_layout.addLayout(side_by_side)
-        main_layout.addWidget(self.output_dir_widget)
-        main_layout.addStretch()
-
+        main_layout.addWidget(self.PageConfig)
+        
         container = QWidget(self)
         container.setLayout(main_layout)
         self.setCentralWidget(container)

@@ -25,7 +25,7 @@ DEFAULT_PROMINENCE_FACTOR: Final[float] = 0.5
 DEFAULT_CRF: Final[int] = 18
 DEFAULT_PRESET: Final[str] = "fast"
 DEFAULT_AUDIO_BITRATE: Final[str] = "192k"
-DEFAULT_OUTPUT_DIR: Final[str] = "output"
+DEFAULT_OUTPUT_DIR: Final[str] = str(Path("output").resolve())
 
 # --- Filesystem constraints ---
 # Windows has a 255-character limit for filenames. We keep a safe margin.

@@ -13,10 +13,9 @@ jobs:
     strategy:
       matrix:
         include:
-          # Pour Linux, on utilise un conteneur Debian pour garantir la compatibilité (Debian, Ubuntu, CachyOS, Arch...)
+          # Pour Linux, on utilise Debian 12 (Bookworm) pour la compatibilité Debian/CachyOS/Arch
           - os: ubuntu-latest
-            container: debian:bullseye
-          # Pour Windows et Mac, pas de conteneur
+            container: debian:bookworm
           - os: windows-latest
             container: ''
           - os: macos-latest
@@ -34,7 +33,6 @@ jobs:
 
       - name: Install FFmpeg (Linux - Debian)
         if: runner.os == 'Linux'
-        # Pas besoin de sudo car on est l'utilisateur root dans le conteneur Debian
         run: |
           apt-get update
           apt-get install -y ffmpeg

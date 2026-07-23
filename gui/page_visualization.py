@@ -109,6 +109,7 @@ class PageVisualization(QWidget):
         self.media_player.setSource(QUrl.fromLocalFile(video_path))
         self.media_player.play()
         self.controls_bar.set_playing(True)
+        self.controls_bar.set_enabled(True)
 
     def reset_ui(self) -> None:
         """Stop playback and reset all controls to their initial state."""

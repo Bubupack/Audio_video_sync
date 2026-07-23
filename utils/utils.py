@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
+import shutil
 import cv2
 from PyQt6.QtGui import QImage, QPixmap
 from mutagen import File
@@ -216,3 +217,12 @@ def extract_video_thumbnail(video_path: str) -> Optional[QPixmap]:
     except Exception as exc:
         logger.error("Failed to extract video frame for %s: %s", video_path, exc)
         return None
+
+
+def is_ffmpeg_available() -> bool:
+    """Check if the FFmpeg executable is accessible within the system PATH.
+
+    Returns:
+        bool: True if ffmpeg executable is found, False otherwise.
+    """
+    return shutil.which("ffmpeg") is not None

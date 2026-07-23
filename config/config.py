@@ -8,6 +8,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
+# --- Time Conversion ---
+MS_PER_SECOND: Final[int] = 1000
+
 # --- Farneback optical-flow parameters ---
 FARNEBACK_PYR_SCALE: Final[float] = 0.5
 FARNEBACK_LEVELS: Final[int] = 3
@@ -17,8 +20,14 @@ FARNEBACK_POLY_N: Final[int] = 5
 FARNEBACK_POLY_SIGMA: Final[float] = 1.2
 FARNEBACK_FLAGS: Final[int] = 0
 
+# --- Motion Analysis Defaults ---
+DEFAULT_TARGET_WIDTH: Final[int] = 256
+DEFAULT_FRAME_STRIDE: Final[int] = 2
+DEFAULT_PROGRESS_INTERVAL: Final[int] = 10
+DEFAULT_PEAK_RELAXATION_FACTOR: Final[float] = 0.8
+DEFAULT_PEAK_PROMINENCE: Final[float] = 0.0
+
 # --- Defaults ---
-DEFAULT_TARGET_WIDTH: Final[int] = 480
 DEFAULT_AUDIO_MIN_DISTANCE_MS: Final[int] = 400
 DEFAULT_VIDEO_MIN_DISTANCE_MS: Final[int] = 500
 DEFAULT_PROMINENCE_FACTOR: Final[float] = 0.5
@@ -28,13 +37,20 @@ DEFAULT_AUDIO_BITRATE: Final[str] = "192k"
 DEFAULT_OUTPUT_DIR: Final[str] = str(Path("output").resolve())
 
 # --- Filesystem constraints ---
-# Windows has a 255-character limit for filenames. We keep a safe margin.
 FILESYSTEM_MAX_STEM_LENGTH: Final[int] = 100
-# Characters forbidden on Windows (and avoided elsewhere for cross-platform safety).
 INVALID_FILENAME_CHARS_REGEX: Final[re.Pattern] = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
-VALID_AUDIO_EXTS: Final[set[str]] = {".mp3", ".wav", ".flac"}
-VALID_VIDEO_EXTS: Final[set[str]] = {".mp4", ".avi", ".mkv", ".mov"}
+# --- Supported Extensions (FFmpeg & PyQt6 QMediaPlayer compatible) ---
+VALID_AUDIO_EXTS: Final[set[str]] = {
+    ".mp3", ".wav", ".flac", ".aac", ".ogg", ".oga", ".m4a", ".opus",
+    ".wma", ".aiff"
+}
+
+VALID_VIDEO_EXTS: Final[set[str]] = {
+    ".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v", ".mpg", ".mpeg",
+    ".ts", ".3gp"
+}
+
 
 @dataclass
 class AudioConfig:
@@ -48,6 +64,10 @@ class VideoConfig:
     """Parameters for video motion analysis via Farneback optical flow."""
     target_width: int = DEFAULT_TARGET_WIDTH
     min_distance_ms: int = DEFAULT_VIDEO_MIN_DISTANCE_MS
+    frame_stride: int = DEFAULT_FRAME_STRIDE
+    progress_interval: int = DEFAULT_PROGRESS_INTERVAL
+    peak_relaxation_factor: float = DEFAULT_PEAK_RELAXATION_FACTOR
+    peak_prominence: float = DEFAULT_PEAK_PROMINENCE
     farneback_pyr_scale: float = FARNEBACK_PYR_SCALE
     farneback_levels: int = FARNEBACK_LEVELS
     farneback_winsize: int = FARNEBACK_WINSIZE

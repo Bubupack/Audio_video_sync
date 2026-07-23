@@ -31,36 +31,28 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install Python, FFmpeg & Build Tools (Linux)
+      - name: Install Python & Build Tools (Linux)
         if: runner.os == 'Linux'
         run: |
           apt-get update
-          apt-get install -y python3 python3-pip python3-venv python-is-python3 ffmpeg build-essential python3-dev
-
-      - name: Install FFmpeg (Windows)
-        if: runner.os == 'Windows'
-        run: choco install ffmpeg -y
-
-      - name: Install FFmpeg (macOS)
-        if: runner.os == 'macOS'
-        run: brew install ffmpeg
+          apt-get install -y python3 python3-pip python3-venv python-is-python3 build-essential python3-dev
 
       - name: Install dependencies (Linux)
         if: runner.os == 'Linux'
         run: |
           python -m pip install --upgrade pip --break-system-packages
           pip install -r requirements.txt --break-system-packages
-          pip install pyinstaller imageio-ffmpeg --break-system-packages
+          pip install pyinstaller --break-system-packages
 
       - name: Install dependencies (Windows & macOS)
         if: runner.os != 'Linux'
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller imageio-ffmpeg
+          pip install pyinstaller
 
       - name: Build with PyInstaller
-        run: pyinstaller --windowed --name "AudioVideoSync" --collect-bin ffmpeg main.py
+        run: pyinstaller --windowed --name "AudioVideoSync" main.py
 
       - name: Compress Build (Windows)
         if: runner.os == 'Windows'

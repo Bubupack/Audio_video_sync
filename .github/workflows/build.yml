@@ -1,0 +1,84 @@
+name: Build Executables
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            container: debian:bookworm
+          - os: windows-latest
+            container: ''
+          - os: macos-latest
+            container: ''
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python (Windows & macOS)
+        if: runner.os != 'Linux'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Python, FFmpeg & Build Tools (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          apt-get update
+          apt-get install -y python3 python3-pip python3-venv python-is-python3 ffmpeg build-essential python3-dev
+
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y
+
+      - name: Install FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          python -m pip install --upgrade pip --break-system-packages
+          pip install -r requirements.txt --break-system-packages
+          pip install pyinstaller imageio-ffmpeg --break-system-packages
+
+      - name: Install dependencies (Windows & macOS)
+        if: runner.os != 'Linux'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller imageio-ffmpeg
+
+      - name: Build with PyInstaller
+        run: pyinstaller --windowed --name "AudioVideoSync" --collect-bin ffmpeg main.py
+
+      - name: Compress Build (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path dist/AudioVideoSync -DestinationPath AudioVideoSync-Windows.zip
+
+      - name: Compress Build (Linux)
+        if: runner.os == 'Linux'
+        run: tar -czvf AudioVideoSync-Linux.tar.gz -C dist AudioVideoSync
+        
+      - name: Compress Build (macOS)
+        if: runner.os == 'macOS'
+        run: cd dist && zip -r ../AudioVideoSync-macOS.zip AudioVideoSync
+
+      - name: Upload Artifacts to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            AudioVideoSync-*.zip
+            AudioVideoSync-*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -16,11 +16,11 @@ from core.video_analysis import get_video_pics
 logger = logging.getLogger(__name__)
 
 # Progress phase boundaries (in percentage)
-PROGRESS_INIT = 2
-PROGRESS_AUDIO_DONE = 4
-PROGRESS_VIDEO_START = 4
-PROGRESS_VIDEO_END = 54
-PROGRESS_RENDER_START = 54
+PROGRESS_INIT = 0
+PROGRESS_AUDIO_START = 4
+PROGRESS_VIDEO_START = 5
+PROGRESS_VIDEO_END = 52
+PROGRESS_RENDER_START = 52
 PROGRESS_RENDER_END = 99
 PROGRESS_DONE = 100
 
@@ -96,7 +96,7 @@ class ProcessingWorker(QObject):
             100, min(int(config.audio.min_distance_ms * ratio), 2000)
         )
 
-        self._update_progress(PROGRESS_AUDIO_DONE, "Analyzing audio")
+        self._update_progress(PROGRESS_AUDIO_START, "Analyzing audio")
         audio_peaks = get_audio_peaks(media.audio_samples, media.sample_rate, config.audio)
         target_count = len(audio_peaks)
 
